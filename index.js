@@ -29,12 +29,12 @@ import * as cheerio from "cheerio";
  * @property {string} time
  */
 
-class PTTStockMCPServer {
+class PTTMCPServer {
   constructor() {
     this.server = new Server(
       {
-        name: "ptt-stock-scraper",
-        version: "1.0.0",
+        name: "ptt-board-scraper",
+        version: "2.0.0",
       },
       {
         capabilities: {
@@ -43,7 +43,7 @@ class PTTStockMCPServer {
       }
     );
 
-    this.PTT_STOCK_URL = 'https://www.ptt.cc/bbs/Stock/index.html';
+    this.PTT_BASE_URL = 'https://www.ptt.cc/bbs';
     this.setupToolHandlers();
   }
 
@@ -51,17 +51,23 @@ class PTTStockMCPServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "get_stock_posts_24h",
-          description: "取得 PTT Stock 版過去 24 小時的文章列表",
+          name: "get_recent_posts",
+          description: "取得指定 PTT 看板最近的文章列表",
           inputSchema: {
             type: "object",
             properties: {
+              board: {
+                type: "string",
+                description: "看板名稱 (例如: Stock, Baseball, Gossiping, HatePolitics, Tech_Job, Movie, NBA)",
+                default: "Stock"
+              },
               limit: {
                 type: "number",
-                description: "限制返回文章數量 (預設: 50)",
+                description: "限制返回文章數量 (預設: 50, 最大: 200)",
                 default: 50
               }
-            }
+            },
+            required: ["board"]
           }
         },
         {
@@ -76,6 +82,14 @@ class PTTStockMCPServer {
               }
             },
             required: ["url"]
+          }
+        },
+        {
+          name: "list_popular_boards",
+          description: "列出常用的 PTT 看板清單",
+          inputSchema: {
+            type: "object",
+            properties: {}
           }
         },
         {
@@ -110,12 +124,14 @@ class PTTStockMCPServer {
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       switch (request.params.name) {
-        case "get_stock_posts_24h":
-          return await this.getStockPosts24h(request.params.arguments);
+        case "get_recent_posts":
+          return await this.getRecentPosts(request.params.arguments);
         case "get_post_detail":
           return await this.getPostDetail(request.params.arguments);
         case "summarize_posts":
           return await this.summarizePosts(request.params.arguments);
+        case "list_popular_boards":
+          return await this.listPopularBoards(request.params.arguments);
         default:
           throw new Error(`Unknown tool: ${request.params.name}`);
       }
@@ -141,42 +157,42 @@ class PTTStockMCPServer {
     }
   }
 
-  async getStockPosts24h(args) {
+  async getRecentPosts(args) {
     try {
-      const limit = args?.limit || 50;
+      const { board = "Stock", limit = 50 } = args || {};
+      
+      // Validate board name
+      if (!this.isValidBoard(board)) {
+        throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
+      }
+      
+      // Validate limit
+      const maxLimit = 200;
+      const actualLimit = Math.min(Math.max(1, limit), maxLimit);
+      
       const posts = [];
-      const now = new Date();
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-      let currentUrl = this.PTT_STOCK_URL;
+      let currentUrl = `${this.PTT_BASE_URL}/${board}/index.html`;
       let pageCount = 0;
-      const maxPages = 5; // 限制搜尋頁數避免過度爬取
+      const maxPages = Math.ceil(actualLimit / 20) + 2; // Dynamic max pages based on limit
 
-      while (posts.length < limit && pageCount < maxPages) {
+      while (posts.length < actualLimit && pageCount < maxPages) {
         const html = await this.fetchWithCookies(currentUrl);
         const $ = cheerio.load(html);
 
         const pageItems = $('.r-ent').toArray();
-        let foundOldPost = false;
 
         for (const item of pageItems) {
           const $item = $(item);
           const title = $item.find('.title a').text().trim();
           const author = $item.find('.author').text().trim();
           const dateStr = $item.find('.date').text().trim();
-          const url = 'https://www.ptt.cc' + $item.find('.title a').attr('href');
+          const href = $item.find('.title a').attr('href');
           const pushCountText = $item.find('.nrec').text().trim();
 
-          if (!title || !url) continue;
-
-          // 解析日期 (PTT 格式: M/DD)
-          const postDate = this.parsePTTDate(dateStr);
+          // Skip invalid posts (deleted, etc.)
+          if (!title || !href || title.includes('(本文已被刪除)')) continue;
           
-          if (postDate < twentyFourHoursAgo) {
-            foundOldPost = true;
-            break;
-          }
-
+          const url = 'https://www.ptt.cc' + href;
           const pushCount = this.parsePushCount(pushCountText);
 
           posts.push({
@@ -187,10 +203,10 @@ class PTTStockMCPServer {
             pushCount
           });
 
-          if (posts.length >= limit) break;
+          if (posts.length >= actualLimit) break;
         }
 
-        if (foundOldPost || posts.length >= limit) break;
+        if (posts.length >= actualLimit) break;
 
         // 找到上一頁連結
         const prevPageLink = $('.btn.wide:contains("‹ 上頁")').attr('href');
@@ -204,7 +220,7 @@ class PTTStockMCPServer {
         content: [
           {
             type: "text",
-            text: `成功取得 ${posts.length} 篇 PTT Stock 版過去 24 小時文章:\n\n${JSON.stringify(posts, null, 2)}`
+            text: `成功取得 ${posts.length} 篇 PTT ${board} 版最新文章:\n\n${JSON.stringify(posts, null, 2)}`
           }
         ]
       };
@@ -384,13 +400,72 @@ class PTTStockMCPServer {
     return total > 10 ? "普通" : "冷門";
   }
 
+  isValidBoard(board) {
+    const validBoards = [
+      'Stock', 'Baseball', 'Gossiping', 'HatePolitics', 
+      'Tech_Job', 'Movie', 'NBA', 'car', 'MobileComm',
+      'PC_Shopping', 'Beauty', 'joke', 'marvel', 'C_Chat',
+      'nba', 'Lifeismoney', 'WomenTalk', 'Boy-Girl', 'Food'
+    ];
+    return validBoards.includes(board);
+  }
+
+  async listPopularBoards() {
+    try {
+      const boards = [
+        { name: 'Stock', description: '股票討論版' },
+        { name: 'Baseball', description: '棒球討論版' },
+        { name: 'Gossiping', description: '八卦版 (需年齡驗證)' },
+        { name: 'HatePolitics', description: '政治黑特版' },
+        { name: 'Tech_Job', description: '科技工作版' },
+        { name: 'Movie', description: '電影版' },
+        { name: 'NBA', description: 'NBA討論版' },
+        { name: 'car', description: '汽車版' },
+        { name: 'MobileComm', description: '手機通訊版' },
+        { name: 'PC_Shopping', description: '電腦購物版' },
+        { name: 'Beauty', description: '表特版' },
+        { name: 'joke', description: '笑話版' },
+        { name: 'marvel', description: '漫威版' },
+        { name: 'C_Chat', description: 'C洽版' },
+        { name: 'Lifeismoney', description: '省錢版' },
+        { name: 'WomenTalk', description: '女孩版' },
+        { name: 'Boy-Girl', description: '男女版' },
+        { name: 'Food', description: '美食版' }
+      ];
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `PTT 熱門看板清單:\n\n${boards.map(b => `• ${b.name}: ${b.description}`).join('\n')}`
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `錯誤: ${error.message}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("PTT Stock MCP Server 已啟動");
+    console.error("PTT Board MCP Server 已啟動");
   }
 }
 
-// 啟動伺服器
-const server = new PTTStockMCPServer();
-server.run().catch(console.error);
+// Export for testing
+export { PTTMCPServer };
+
+// 啟動伺服器 (only if running directly)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const server = new PTTMCPServer();
+  server.run().catch(console.error);
+}
