@@ -73,6 +73,10 @@ class PTTMCPServer {
               maxPushCount: {
                 type: "number", 
                 description: "最大推文數過濾 (可選, 例如: 50 表示只返回推文數 <= 50 的文章)"
+              },
+              titleKeyword: {
+                type: "string",
+                description: "標題關鍵字過濾 (可選, 例如: '台積電' 只返回標題包含此關鍵字的文章)"
               }
             },
             required: ["board"]
@@ -90,6 +94,60 @@ class PTTMCPServer {
               }
             },
             required: ["url"]
+          }
+        },
+        {
+          name: "search_thread_posts",
+          description: "搜尋指定標題的所有相關文章 (同標題文章)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              board: {
+                type: "string",
+                description: "看板名稱 (例如: Stock, Baseball, NBA)",
+                default: "Stock"
+              },
+              title: {
+                type: "string",
+                description: "要搜尋的文章標題 (例如: '[新聞] 台積電Q4財報亮眼')"
+              },
+              limit: {
+                type: "number",
+                description: "限制返回文章數量 (預設: 30, 最大: 100)",
+                default: 30
+              }
+            },
+            required: ["board", "title"]
+          }
+        },
+        {
+          name: "search_posts",
+          description: "在指定看板搜尋文章 (支援多種搜尋類型)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              board: {
+                type: "string",
+                description: "看板名稱 (例如: Stock, Baseball, NBA)",
+                default: "Stock"
+              },
+              query: {
+                type: "string",
+                description: "搜尋關鍵字或片語"
+              },
+              searchType: {
+                type: "string",
+                enum: ["keyword", "title", "author"],
+                description: "搜尋類型: keyword(全文), title(標題), author(作者)",
+                default: "keyword"
+              },
+              limit: {
+                type: "number",
+                description: "限制返回文章數量 (預設: 30, 最大: 100)",
+                default: 30
+              }
+            },
+            required: ["board", "query"]
           }
         },
         {
@@ -134,6 +192,10 @@ class PTTMCPServer {
       switch (request.params.name) {
         case "get_recent_posts":
           return await this.getRecentPosts(request.params.arguments);
+        case "search_thread_posts":
+          return await this.searchThreadPosts(request.params.arguments);
+        case "search_posts":
+          return await this.searchPosts(request.params.arguments);
         case "get_post_detail":
           return await this.getPostDetail(request.params.arguments);
         case "summarize_posts":
@@ -167,7 +229,7 @@ class PTTMCPServer {
 
   async getRecentPosts(args) {
     try {
-      const { board = "Stock", limit = 50, minPushCount, maxPushCount } = args || {};
+      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword } = args || {};
       
       // Validate board name
       if (!this.isValidBoard(board)) {
@@ -194,8 +256,8 @@ class PTTMCPServer {
       const posts = [];
       let currentUrl = `${this.PTT_BASE_URL}/${board}/index.html`;
       let pageCount = 0;
-      // If filtering by push count, we might need more pages to find enough matching posts
-      const hasFilter = minPushCount !== undefined || maxPushCount !== undefined;
+      // If filtering, we might need more pages to find enough matching posts
+      const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
       const maxPages = hasFilter ? Math.ceil(actualLimit / 5) + 5 : Math.ceil(actualLimit / 20) + 2;
 
       while (posts.length < actualLimit && pageCount < maxPages) {
@@ -218,6 +280,9 @@ class PTTMCPServer {
           const url = 'https://www.ptt.cc' + href;
           const pushCount = this.parsePushCount(pushCountText);
 
+          // Apply title keyword filter
+          if (titleKeyword && !title.toLowerCase().includes(titleKeyword.toLowerCase())) continue;
+          
           // Apply push count filters
           if (minPushCount !== undefined && pushCount < minPushCount) continue;
           if (maxPushCount !== undefined && pushCount > maxPushCount) continue;
@@ -248,6 +313,7 @@ class PTTMCPServer {
       
       if (hasFilter) {
         const filterInfo = [];
+        if (titleKeyword) filterInfo.push(`標題包含 '${titleKeyword}'`);
         if (minPushCount !== undefined) filterInfo.push(`推文數 >= ${minPushCount}`);
         if (maxPushCount !== undefined) filterInfo.push(`推文數 <= ${maxPushCount}`);
         resultMessage += ` (篩選條件: ${filterInfo.join(', ')})`;
@@ -258,6 +324,206 @@ class PTTMCPServer {
           {
             type: "text",
             text: `${resultMessage}:\n\n${JSON.stringify(posts, null, 2)}`
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `錯誤: ${error.message}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
+  // Helper function to encode search queries for PTT
+  encodePTTQuery(query) {
+    return encodeURIComponent(query).replace(/%20/g, '+');
+  }
+
+  async searchThreadPosts(args) {
+    try {
+      const { board = "Stock", title, limit = 30 } = args || {};
+      
+      // Validate board name
+      if (!this.isValidBoard(board)) {
+        throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
+      }
+      
+      if (!title) {
+        throw new Error('需要提供文章標題');
+      }
+      
+      // Validate limit
+      const maxLimit = 100;
+      const actualLimit = Math.min(Math.max(1, limit), maxLimit);
+      
+      const posts = [];
+      const searchQuery = `thread:${title}`;
+      const encodedQuery = this.encodePTTQuery(searchQuery);
+      let currentUrl = `${this.PTT_BASE_URL}/${board}/search?q=${encodedQuery}`;
+      let pageCount = 0;
+      const maxPages = Math.ceil(actualLimit / 20) + 2;
+
+      while (posts.length < actualLimit && pageCount < maxPages) {
+        const html = await this.fetchWithCookies(currentUrl);
+        const $ = cheerio.load(html);
+
+        const pageItems = $('.r-ent').toArray();
+
+        for (const item of pageItems) {
+          const $item = $(item);
+          const postTitle = $item.find('.title a').text().trim();
+          const author = $item.find('.author').text().trim();
+          const dateStr = $item.find('.date').text().trim();
+          const href = $item.find('.title a').attr('href');
+          const pushCountText = $item.find('.nrec').text().trim();
+
+          // Skip invalid posts
+          if (!postTitle || !href || postTitle.includes('(本文已被刪除)')) continue;
+          
+          const url = 'https://www.ptt.cc' + href;
+          const pushCount = this.parsePushCount(pushCountText);
+
+          posts.push({
+            title: postTitle,
+            author,
+            date: dateStr,
+            url,
+            pushCount
+          });
+
+          if (posts.length >= actualLimit) break;
+        }
+
+        if (posts.length >= actualLimit) break;
+
+        // Find next page link for search results
+        const nextPageBtn = $('.btn.wide:contains("下頁 ›")');
+        if (nextPageBtn.length === 0) break;
+        
+        const nextPageHref = nextPageBtn.attr('href');
+        if (!nextPageHref) break;
+
+        currentUrl = 'https://www.ptt.cc' + nextPageHref;
+        pageCount++;
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `成功搜尋到 ${posts.length} 篇標題為 "${title}" 的相關文章:\n\n${JSON.stringify(posts, null, 2)}`
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `錯誤: ${error.message}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+
+  async searchPosts(args) {
+    try {
+      const { board = "Stock", query, searchType = "keyword", limit = 30 } = args || {};
+      
+      // Validate board name
+      if (!this.isValidBoard(board)) {
+        throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
+      }
+      
+      if (!query) {
+        throw new Error('需要提供搜尋關鍵字');
+      }
+      
+      // Validate limit
+      const maxLimit = 100;
+      const actualLimit = Math.min(Math.max(1, limit), maxLimit);
+      
+      const posts = [];
+      
+      // Build search query based on search type
+      let searchQuery;
+      switch (searchType) {
+        case 'title':
+          searchQuery = `title:${query}`;
+          break;
+        case 'author':
+          searchQuery = `author:${query}`;
+          break;
+        case 'keyword':
+        default:
+          searchQuery = query;
+          break;
+      }
+      
+      const encodedQuery = this.encodePTTQuery(searchQuery);
+      let currentUrl = `${this.PTT_BASE_URL}/${board}/search?q=${encodedQuery}`;
+      let pageCount = 0;
+      const maxPages = Math.ceil(actualLimit / 20) + 2;
+
+      while (posts.length < actualLimit && pageCount < maxPages) {
+        const html = await this.fetchWithCookies(currentUrl);
+        const $ = cheerio.load(html);
+
+        const pageItems = $('.r-ent').toArray();
+
+        for (const item of pageItems) {
+          const $item = $(item);
+          const title = $item.find('.title a').text().trim();
+          const author = $item.find('.author').text().trim();
+          const dateStr = $item.find('.date').text().trim();
+          const href = $item.find('.title a').attr('href');
+          const pushCountText = $item.find('.nrec').text().trim();
+
+          // Skip invalid posts
+          if (!title || !href || title.includes('(本文已被刪除)')) continue;
+          
+          const url = 'https://www.ptt.cc' + href;
+          const pushCount = this.parsePushCount(pushCountText);
+
+          posts.push({
+            title,
+            author,
+            date: dateStr,
+            url,
+            pushCount
+          });
+
+          if (posts.length >= actualLimit) break;
+        }
+
+        if (posts.length >= actualLimit) break;
+
+        // Find next page link for search results
+        const nextPageBtn = $('.btn.wide:contains("下頁 ›")');
+        if (nextPageBtn.length === 0) break;
+        
+        const nextPageHref = nextPageBtn.attr('href');
+        if (!nextPageHref) break;
+
+        currentUrl = 'https://www.ptt.cc' + nextPageHref;
+        pageCount++;
+      }
+
+      const searchTypeDesc = { keyword: '關鍵字', title: '標題', author: '作者' }[searchType];
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `成功以${searchTypeDesc}搜尋到 ${posts.length} 篇包含 "${query}" 的文章:\n\n${JSON.stringify(posts, null, 2)}`
           }
         ]
       };

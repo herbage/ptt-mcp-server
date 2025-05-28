@@ -11,6 +11,8 @@
 - 支援推文情緒分析和熱門度計算
 - 看板名稱驗證和錯誤處理
 - 推文數過濾 (支援最小值、最大值、範圍過濾)
+- 搜尋功能 (同標題文章、關鍵字搜尋、標題搜尋、作者搜尋)
+- 標題關鍵字過濾
 
 ## 安裝步驟
 
@@ -40,6 +42,7 @@ npm start
 - `limit` (可選): 限制返回文章數量，預設 50，最大 200
 - `minPushCount` (可選): 最小推文數過濾，例如 10 表示只返回推文數 >= 10 的文章
 - `maxPushCount` (可選): 最大推文數過濾，例如 50 表示只返回推文數 <= 50 的文章
+- `titleKeyword` (可選): 標題關鍵字過濾，例如 '台積電' 只返回標題包含此關鍵字的文章
 
 **範例：**
 
@@ -79,6 +82,25 @@ npm start
 }
 ```
 
+標題關鍵字過濾：
+```json
+{
+  "board": "Stock",
+  "limit": 20,
+  "titleKeyword": "台積電"
+}
+```
+
+組合過濾 (台積電 + 高推文數)：
+```json
+{
+  "board": "Stock",
+  "limit": 15,
+  "titleKeyword": "台積電",
+  "minPushCount": 20
+}
+```
+
 ### 2. get_post_detail
 取得特定文章的詳細內容包含推文
 
@@ -112,7 +134,65 @@ npm start
 }
 ```
 
-### 4. list_popular_boards
+### 4. search_thread_posts
+搜尋指定標題的所有相關文章 (同標題文章)
+
+**參數：**
+- `board` (必需): 看板名稱，例如 "Stock", "Baseball", "NBA"
+- `title` (必需): 要搜尋的文章標題
+- `limit` (可選): 限制返回文章數量，預設 30，最大 100
+
+**範例：**
+```json
+{
+  "board": "Baseball",
+  "title": "[討論] 紅中根本在亂搞吧",
+  "limit": 20
+}
+```
+
+### 5. search_posts
+在指定看板搜尋文章 (支援多種搜尋類型)
+
+**參數：**
+- `board` (必需): 看板名稱，例如 "Stock", "Baseball", "NBA"
+- `query` (必需): 搜尋關鍵字或片語
+- `searchType` (可選): 搜尋類型，"keyword"(全文)、"title"(標題)、"author"(作者)，預設 "keyword"
+- `limit` (可選): 限制返回文章數量，預設 30，最大 100
+
+**範例：**
+
+關鍵字搜尋：
+```json
+{
+  "board": "Stock",
+  "query": "台積電",
+  "searchType": "keyword",
+  "limit": 30
+}
+```
+
+標題搜尋：
+```json
+{
+  "board": "NBA",
+  "query": "MVP",
+  "searchType": "title",
+  "limit": 20
+}
+```
+
+作者搜尋：
+```json
+{
+  "board": "Stock",
+  "query": "某位使用者",
+  "searchType": "author",
+  "limit": 15
+}
+```
+
+### 6. list_popular_boards
 列出所有支援的 PTT 看板清單
 
 **參數：** 無
@@ -177,6 +257,10 @@ npm start
 - "找出 Stock 版推文數超過 30 的熱門文章"
 - "取得 Baseball 版推文數在 10-50 之間的文章"
 - "找 NBA 版推文數較少的冷門討論 (推文數 <= 5)"
+- "搜尋 Baseball 版所有關於某個特定討論的文章"
+- "在 Stock 版搜尋包含 '台積電' 的所有文章"
+- "找出某位作者在 Tech_Job 版的所有文章"
+- "取得 Stock 版標題包含 '財報' 且推文數超過 10 的文章"
 
 ## 技術規格
 
@@ -227,6 +311,14 @@ npm run dev
 可以在 `setupToolHandlers()` 中添加新的工具函數。
 
 ## 更新日誌
+
+### v2.3.0 (2025-05-28)
+- 🔍 新增搜尋功能 (search_thread_posts, search_posts)
+- 🔎 支援同標題文章搜尋 (搜尋同標題文章)
+- 🎯 支援多種搜尋類型 (關鍵字、標題、作者)
+- 🏷️ 新增標題關鍵字過濾到 get_recent_posts
+- 🔗 完整的 PTT 搜尋 URL 編碼支援
+- 📄 支援搜尋結果分頁處理
 
 ### v2.2.0 (2025-05-28)
 - 🔍 新增推文數過濾功能 (minPushCount, maxPushCount)
