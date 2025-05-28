@@ -37,9 +37,11 @@ This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest
 
 ### PTT-Specific Logic
 
-**Supported Boards** (index.js:906-913)
-- 19 popular PTT boards including Stock, Baseball, NBA, Tech_Job, etc.
-- Board validation prevents invalid requests
+**Dynamic Board Validation** (index.js:906-949)
+- Dynamic validation by checking board existence via HTTP requests
+- Caching mechanism for validated boards (1 hour for valid, 10 minutes for invalid)
+- Fallback to hardcoded popular boards list on network errors
+- Supports any public PTT board, not limited to predefined list
 
 **Date Handling** (index.js:440-502)
 - Flexible date parsing supporting both `M/DD` (PTT native) and `YYYY-MM-DD` formats
@@ -74,8 +76,8 @@ This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest
 
 ## Working with This Codebase
 
-### Adding New Board Support
-Add board names to both `isValidBoard()` and `listPopularBoards()` methods.
+### Board Validation System
+The `isValidBoard()` method now dynamically validates boards by making HTTP requests to PTT. No need to manually add new boards - the system supports any public PTT board automatically. The `listPopularBoards()` method shows popular examples but is not exhaustive.
 
 ### Modifying Search Logic
 Search functionality is centralized in `searchPosts()` and `searchThreadPosts()` methods. PTT search uses specific URL query parameters that may need adjustment if PTT changes their search interface.

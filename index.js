@@ -44,6 +44,7 @@ class PTTMCPServer {
     );
 
     this.PTT_BASE_URL = 'https://www.ptt.cc/bbs';
+    this.validBoardsCache = new Map(); // Cache for validated boards
     this.setupToolHandlers();
   }
 
@@ -258,7 +259,7 @@ class PTTMCPServer {
       const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword, onlyToday = true, dateFrom, dateTo } = args || {};
       
       // Validate board name
-      if (!this.isValidBoard(board)) {
+      if (!(await this.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
       }
       
@@ -506,7 +507,7 @@ class PTTMCPServer {
       const { board = "Stock", title, limit = 30 } = args || {};
       
       // Validate board name
-      if (!this.isValidBoard(board)) {
+      if (!(await this.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
       }
       
@@ -595,7 +596,7 @@ class PTTMCPServer {
       const { board = "Stock", query, searchType = "keyword", limit = 30, onlyToday = false, dateFrom, dateTo } = args || {};
       
       // Validate board name
-      if (!this.isValidBoard(board)) {
+      if (!(await this.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
       }
       
@@ -902,14 +903,49 @@ class PTTMCPServer {
     return total > 10 ? "普通" : "冷門";
   }
 
-  isValidBoard(board) {
-    const validBoards = [
-      'Stock', 'Baseball', 'Gossiping', 'HatePolitics', 
-      'Tech_Job', 'Movie', 'NBA', 'car', 'MobileComm',
-      'PC_Shopping', 'Beauty', 'joke', 'marvel', 'C_Chat',
-      'nba', 'Lifeismoney', 'WomenTalk', 'Boy-Girl', 'Food'
-    ];
-    return validBoards.includes(board);
+  async isValidBoard(board) {
+    // Check cache first
+    if (this.validBoardsCache.has(board)) {
+      return this.validBoardsCache.get(board);
+    }
+
+    try {
+      // Try to fetch the board's index page to check if it exists
+      const boardUrl = `${this.PTT_BASE_URL}/${board}/index.html`;
+      const response = await fetch(boardUrl, {
+        headers: {
+          'Cookie': 'over18=1',
+          'User-Agent': 'Mozilla/5.0 (compatible; PTT-MCP-Server/2.0)'
+        }
+      });
+
+      const isValid = response.status === 200;
+      
+      // Cache the result (valid boards cached for 1 hour, invalid for 10 minutes)
+      this.validBoardsCache.set(board, isValid);
+      setTimeout(() => {
+        this.validBoardsCache.delete(board);
+      }, isValid ? 60 * 60 * 1000 : 10 * 60 * 1000);
+
+      return isValid;
+    } catch (error) {
+      // If network error, fallback to hardcoded list for known popular boards
+      const fallbackBoards = [
+        'Stock', 'Baseball', 'Gossiping', 'HatePolitics', 
+        'Tech_Job', 'Movie', 'NBA', 'car', 'MobileComm',
+        'PC_Shopping', 'Beauty', 'joke', 'marvel', 'C_Chat',
+        'nba', 'Lifeismoney', 'WomenTalk', 'Boy-Girl', 'Food'
+      ];
+      const isValid = fallbackBoards.includes(board);
+      
+      // Cache fallback result for shorter time
+      this.validBoardsCache.set(board, isValid);
+      setTimeout(() => {
+        this.validBoardsCache.delete(board);
+      }, 5 * 60 * 1000); // 5 minutes
+
+      return isValid;
+    }
   }
 
   async listPopularBoards() {
