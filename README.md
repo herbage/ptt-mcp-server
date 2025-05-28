@@ -2,6 +2,36 @@
 
 這是一個 MCP (Model Context Protocol) 伺服器，專門用於擷取多個 PTT 看板的文章和推文資料，並提供摘要功能。支援包括 Stock、Baseball、Gossiping、HatePolitics、Tech_Job、Movie、NBA 等熱門看板。
 
+## 🚀 快速開始
+
+### 在 Claude Desktop 中使用
+
+1. 編輯 Claude Desktop 的配置文件：
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+2. 添加 MCP 伺服器配置：
+
+```json
+{
+  "mcpServers": {
+    "ptt-board": {
+      "command": "node",
+      "args": ["/path/to/your/ptt-mcp-server/index.js"]
+    }
+  }
+}
+```
+
+3. 重啟 Claude Desktop
+
+### 快速指令範例
+
+- "幫我取得 PTT Baseball 版最新 20 篇文章"
+- "分析 NBA 版最近的熱門討論"
+- "找出 Stock 版推文數超過 30 的熱門文章"
+- "在 Stock 版搜尋包含 '台積電' 的所有文章"
+
 ## 功能特色
 
 - 擷取多個 PTT 看板最近的文章列表
@@ -288,42 +318,16 @@ npm start
 | Boy-Girl     | 男女版              |
 | Food         | 美食版              |
 
-## 使用方式
+## 更多使用範例
 
-### 在 Claude Desktop 中使用
+### 進階指令範例
 
-1. 編輯 Claude Desktop 的配置文件：
-
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-2. 添加 MCP 伺服器配置：
-
-```json
-{
-  "mcpServers": {
-    "ptt-board": {
-      "command": "node",
-      "args": ["/path/to/your/ptt-mcp-server/index.js"]
-    }
-  }
-}
-```
-
-3. 重啟 Claude Desktop
-
-### 指令範例
-
-- "幫我取得 PTT Baseball 版最新 20 篇文章"
 - "列出所有支援的 PTT 看板"
-- "分析 NBA 版最近的熱門討論"
 - "摘要 Tech_Job 版關於台積電的最新文章"
 - "取得 Gossiping 版最新 50 篇文章"
-- "找出 Stock 版推文數超過 30 的熱門文章"
 - "取得 Baseball 版推文數在 10-50 之間的文章"
 - "找 NBA 版推文數較少的冷門討論 (推文數 <= 5)"
 - "搜尋 Baseball 版所有關於某個特定討論的文章"
-- "在 Stock 版搜尋包含 '台積電' 的所有文章"
 - "找出某位作者在 Tech_Job 版的所有文章"
 - "取得 Stock 版標題包含 '財報' 且推文數超過 10 的文章"
 - "顯示 NBA 版昨天和今天的所有文章"
