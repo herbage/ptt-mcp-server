@@ -151,13 +151,26 @@ class PTTMCPServer {
               searchType: {
                 type: "string",
                 enum: ["keyword", "title", "author"],
-                description: "搜尋類型: keyword(全文), title(標題), author(作者)",
+                description: "搜尋類型: keyword(全文搜尋), title(標題包含關鍵字), author(作者)",
                 default: "keyword"
               },
               limit: {
                 type: "number",
                 description: "限制返回文章數量 (預設: 30, 最大: 100)",
                 default: 30
+              },
+              onlyToday: {
+                type: "boolean",
+                description: "只顯示今天的文章 (預設: false)。設為 true 則只顯示今日文章",
+                default: false
+              },
+              dateFrom: {
+                type: "string",
+                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')。覆蓋 onlyToday 設定"
+              },
+              dateTo: {
+                type: "string", 
+                description: "結束日期過濾 (可選, 格式同 dateFrom)。需搭配 dateFrom 使用"
               }
             },
             required: ["board", "query"]
@@ -579,7 +592,7 @@ class PTTMCPServer {
 
   async searchPosts(args) {
     try {
-      const { board = "Stock", query, searchType = "keyword", limit = 30 } = args || {};
+      const { board = "Stock", query, searchType = "keyword", limit = 30, onlyToday = false, dateFrom, dateTo } = args || {};
       
       // Validate board name
       if (!this.isValidBoard(board)) {
@@ -594,13 +607,32 @@ class PTTMCPServer {
       const maxLimit = 100;
       const actualLimit = Math.min(Math.max(1, limit), maxLimit);
       
+      // Validate date parameters
+      if (dateFrom && !this.parseFlexibleDate(dateFrom)) {
+        throw new Error(`無效的起始日期格式: ${dateFrom}. 請使用 'M/DD' 或 'YYYY-MM-DD' 格式`);
+      }
+      
+      if (dateTo && !this.parseFlexibleDate(dateTo)) {
+        throw new Error(`無效的結束日期格式: ${dateTo}. 請使用 'M/DD' 或 'YYYY-MM-DD' 格式`);
+      }
+      
+      if (dateFrom && dateTo) {
+        const fromDate = this.parseFlexibleDate(dateFrom);
+        const toDate = this.parseFlexibleDate(dateTo);
+        if (fromDate > toDate) {
+          throw new Error(`起始日期 (${dateFrom}) 不能晚於結束日期 (${dateTo})`);
+        }
+      }
+      
       const posts = [];
       
       // Build search query based on search type
       let searchQuery;
       switch (searchType) {
         case 'title':
-          searchQuery = `title:${query}`;
+          // For title searches, use keyword search for better partial matching
+          // PTT's title: prefix requires more exact matches
+          searchQuery = query;
           break;
         case 'author':
           searchQuery = `author:${query}`;
@@ -633,6 +665,12 @@ class PTTMCPServer {
           // Skip invalid posts
           if (!title || !href || title.includes('(本文已被刪除)')) continue;
           
+          // Apply search type filter
+          if (searchType === 'title' && !title.toLowerCase().includes(query.toLowerCase())) continue;
+          
+          // Apply date filter
+          if (!this.isPostInDateRange(dateStr, dateFrom, dateTo, onlyToday)) continue;
+          
           const url = 'https://www.ptt.cc' + href;
           const pushCount = this.parsePushCount(pushCountText);
 
@@ -662,11 +700,29 @@ class PTTMCPServer {
 
       const searchTypeDesc = { keyword: '關鍵字', title: '標題', author: '作者' }[searchType];
       
+      // Generate result message with filter info
+      let resultMessage = `成功以${searchTypeDesc}搜尋到 ${posts.length} 篇包含 "${query}" 的文章`;
+      
+      const filterInfo = [];
+      if (dateFrom && dateTo) {
+        filterInfo.push(`日期範圍 ${dateFrom} 到 ${dateTo}`);
+      } else if (dateFrom) {
+        filterInfo.push(`${dateFrom} 之後`);
+      } else if (dateTo) {
+        filterInfo.push(`${dateTo} 之前`);
+      } else if (onlyToday) {
+        filterInfo.push('僅今日');
+      }
+      
+      if (filterInfo.length > 0) {
+        resultMessage += ` (篩選條件: ${filterInfo.join(', ')})`;
+      }
+      
       return {
         content: [
           {
             type: "text",
-            text: `成功以${searchTypeDesc}搜尋到 ${posts.length} 篇包含 "${query}" 的文章:\n\n${JSON.stringify(posts, null, 2)}`
+            text: `${resultMessage}:\n\n${JSON.stringify(posts, null, 2)}`
           }
         ]
       };

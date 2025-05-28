@@ -265,3 +265,90 @@ Chose range filtering approach with two optional parameters:
 - ✅ Comprehensive error handling
 - ✅ Dynamic pagination optimization
 - ✅ Complete documentation and examples
+
+---
+
+### Part 5: Search Functionality Enhancement
+
+### Issue Identified
+The `search_posts` function with `searchType: "title"` was unable to find posts with partial title matches. Specifically, searching for "盤中閒聊" could not locate the post "[閒聊] 2025/05/28 盤中閒聊" due to PTT's search API limitations.
+
+### Root Cause Analysis
+PTT's `title:` search prefix requires more exact matches and doesn't work well with partial keyword matching. The query `title:盤中閒聊` would fail to find posts with titles like "[閒聊] 2025/05/28 盤中閒聊" that contain the keyword but have additional text.
+
+### Investigation Process
+1. **Manual Testing**: Verified the post existed at `https://www.ptt.cc/bbs/Stock/M.1748392204.A.ACE.html`
+2. **PTT Search Analysis**: Found that `thread:[閒聊] 2025/05/28 盤中閒聊` works but `title:盤中閒聊` doesn't
+3. **URL Testing**: Confirmed keyword search `盤中閒聊` (without prefix) successfully finds the target post
+
+### Technical Solution
+**Before (problematic):**
+```javascript
+case 'title':
+  searchQuery = `title:${query}`;  // Too restrictive
+  break;
+```
+
+**After (fixed):**
+```javascript
+case 'title':
+  // Use keyword search for better partial matching
+  searchQuery = query;  // More flexible
+  break;
+```
+
+**Client-side filtering added:**
+```javascript
+// Apply search type filter  
+if (searchType === 'title' && !title.toLowerCase().includes(query.toLowerCase())) continue;
+```
+
+### Implementation Details
+1. **Modified Query Construction**: Title searches now use keyword search instead of `title:` prefix
+2. **Added Client-side Filtering**: Results are filtered to ensure title searches only return posts with the keyword in the title
+3. **Updated Documentation**: Clarified that title search finds "標題包含關鍵字"
+4. **Enhanced Date Filtering**: Added comprehensive date filtering support to `search_posts` function
+
+### New Features Added
+- **Date Filtering for Search**: Added `onlyToday`, `dateFrom`, `dateTo` parameters to `search_posts`
+- **Flexible Date Formats**: Support for both 'M/DD' and 'YYYY-MM-DD' formats
+- **Improved Error Messages**: Better validation and user feedback
+
+### Validation Testing
+```bash
+# Confirmed the fix works:
+curl "https://www.ptt.cc/bbs/Stock/search?q=盤中閒聊" 
+# Returns: href="/bbs/Stock/M.1748392204.A.ACE.html" (target post)
+```
+
+### Search API Improvements
+1. **Better Partial Matching**: Title searches now find posts containing keywords
+2. **Date Range Support**: Search can be limited to specific date ranges
+3. **Consistent Behavior**: All search types now work reliably with recent posts
+
+### Testing Results
+✅ Title search "盤中閒聊" now finds "[閒聊] 2025/05/28 盤中閒聊"
+✅ Date filtering works correctly with search functions
+✅ Keyword and author searches remain fully functional
+✅ Error handling improved for invalid date formats
+
+### Files Modified
+- `index.js`: Enhanced `search_posts` function with date filtering and improved title search
+- Tool schema: Added date filtering parameters to search_posts
+
+### Lessons Learned
+1. **External API Limitations**: PTT's `title:` prefix has strict matching requirements
+2. **Hybrid Approaches**: Combining server-side keyword search with client-side filtering can overcome API limitations
+3. **User Expectations**: "Title search" users expect substring matching, not exact matching
+4. **Fallback Strategies**: Having multiple approaches increases reliability
+
+### Updated Total Features Delivered
+- ✅ Multi-board support (19 boards)
+- ✅ Reliable recent posts fetching  
+- ✅ Board validation and discovery
+- ✅ Push count filtering (min/max/range)
+- ✅ **Enhanced search functionality with date filtering**
+- ✅ **Improved title search with partial matching**
+- ✅ Comprehensive error handling
+- ✅ Dynamic pagination optimization
+- ✅ Complete documentation and examples
