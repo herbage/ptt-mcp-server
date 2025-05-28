@@ -13,6 +13,7 @@
 - 推文數過濾 (支援最小值、最大值、範圍過濾)
 - 搜尋功能 (同標題文章、關鍵字搜尋、標題搜尋、作者搜尋)
 - 標題關鍵字過濾
+- 日期過濾 (預設僅今日文章，支援日期範圍查詢)
 
 ## 安裝步驟
 
@@ -43,6 +44,9 @@ npm start
 - `minPushCount` (可選): 最小推文數過濾，例如 10 表示只返回推文數 >= 10 的文章
 - `maxPushCount` (可選): 最大推文數過濾，例如 50 表示只返回推文數 <= 50 的文章
 - `titleKeyword` (可選): 標題關鍵字過濾，例如 '台積電' 只返回標題包含此關鍵字的文章
+- `onlyToday` (可選): 只顯示今天的文章，預設 true。設為 false 則顯示所有日期
+- `dateFrom` (可選): 起始日期過濾，格式 'M/DD' 如 '5/25' 或 'YYYY-MM-DD'，覆蓋 onlyToday 設定
+- `dateTo` (可選): 結束日期過濾，格式同 dateFrom，需搭配 dateFrom 使用
 
 **範例：**
 
@@ -98,6 +102,35 @@ npm start
   "limit": 15,
   "titleKeyword": "台積電",
   "minPushCount": 20
+}
+```
+
+所有日期文章 (關閉今日限制)：
+```json
+{
+  "board": "Baseball",
+  "limit": 30,
+  "onlyToday": false
+}
+```
+
+日期範圍過濾：
+```json
+{
+  "board": "Stock",
+  "limit": 20,
+  "dateFrom": "5/25",
+  "dateTo": "5/28"
+}
+```
+
+組合日期和推文數過濾：
+```json
+{
+  "board": "NBA",
+  "limit": 10,
+  "dateFrom": "5/27",
+  "minPushCount": 15
 }
 ```
 
@@ -261,6 +294,9 @@ npm start
 - "在 Stock 版搜尋包含 '台積電' 的所有文章"
 - "找出某位作者在 Tech_Job 版的所有文章"
 - "取得 Stock 版標題包含 '財報' 且推文數超過 10 的文章"
+- "顯示 NBA 版昨天和今天的所有文章"
+- "找出 Baseball 版 5/25 到 5/28 期間的熱門文章"
+- "取得 Stock 版今天台積電相關的討論"
 
 ## 技術規格
 

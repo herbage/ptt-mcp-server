@@ -77,6 +77,19 @@ class PTTMCPServer {
               titleKeyword: {
                 type: "string",
                 description: "標題關鍵字過濾 (可選, 例如: '台積電' 只返回標題包含此關鍵字的文章)"
+              },
+              onlyToday: {
+                type: "boolean",
+                description: "只顯示今天的文章 (預設: true)。設為 false 則顯示所有日期",
+                default: true
+              },
+              dateFrom: {
+                type: "string",
+                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')。覆蓋 onlyToday 設定"
+              },
+              dateTo: {
+                type: "string", 
+                description: "結束日期過濾 (可選, 格式同 dateFrom)。需搭配 dateFrom 使用"
               }
             },
             required: ["board"]
@@ -229,7 +242,7 @@ class PTTMCPServer {
 
   async getRecentPosts(args) {
     try {
-      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword } = args || {};
+      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword, onlyToday = true, dateFrom, dateTo } = args || {};
       
       // Validate board name
       if (!this.isValidBoard(board)) {
@@ -253,12 +266,58 @@ class PTTMCPServer {
         throw new Error(`最小推文數 (${minPushCount}) 不能大於最大推文數 (${maxPushCount})`);
       }
       
+      // Validate date parameters
+      if (dateFrom && !this.parseFlexibleDate(dateFrom)) {
+        throw new Error(`無效的起始日期格式: ${dateFrom}. 請使用 'M/DD' 或 'YYYY-MM-DD' 格式`);
+      }
+      
+      if (dateTo && !this.parseFlexibleDate(dateTo)) {
+        throw new Error(`無效的結束日期格式: ${dateTo}. 請使用 'M/DD' 或 'YYYY-MM-DD' 格式`);
+      }
+      
+      if (dateFrom && dateTo) {
+        const fromDate = this.parseFlexibleDate(dateFrom);
+        const toDate = this.parseFlexibleDate(dateTo);
+        if (fromDate > toDate) {
+          throw new Error(`起始日期 (${dateFrom}) 不能晚於結束日期 (${dateTo})`);
+        }
+      }
+      
+      // Check if date range is too far back (for efficiency)
+      const maxDaysBack = 14; // Reasonable limit for pagination
+      const earliestAllowed = new Date();
+      earliestAllowed.setDate(earliestAllowed.getDate() - maxDaysBack);
+      
+      if (dateFrom) {
+        const fromDate = this.parseFlexibleDate(dateFrom);
+        if (fromDate < earliestAllowed) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `日期範圍限制：最多只能查詢過去 ${maxDaysBack} 天的文章 (${earliestAllowed.toLocaleDateString('zh-TW')} 之後)。\n\n建議使用 search_posts 功能搜尋更久遠的文章，例如：\n{"board": "${board}", "query": "關鍵字", "searchType": "keyword"}`
+              }
+            ]
+          };
+        }
+      }
+      
       const posts = [];
       let currentUrl = `${this.PTT_BASE_URL}/${board}/index.html`;
       let pageCount = 0;
-      // If filtering, we might need more pages to find enough matching posts
+      // If filtering, we might need more pages to find enough matching posts  
       const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
-      const maxPages = hasFilter ? Math.ceil(actualLimit / 5) + 5 : Math.ceil(actualLimit / 20) + 2;
+      const hasDateFilter = dateFrom || dateTo || onlyToday !== false;
+      
+      // Limit pagination for date filtering to prevent excessive requests
+      let maxPages;
+      if (hasDateFilter && (dateFrom || dateTo)) {
+        maxPages = 15; // Higher limit for date range searches
+      } else if (hasFilter) {
+        maxPages = Math.ceil(actualLimit / 5) + 5;
+      } else {
+        maxPages = Math.ceil(actualLimit / 20) + 2;
+      }
 
       while (posts.length < actualLimit && pageCount < maxPages) {
         const html = await this.fetchWithCookies(currentUrl);
@@ -280,6 +339,9 @@ class PTTMCPServer {
           const url = 'https://www.ptt.cc' + href;
           const pushCount = this.parsePushCount(pushCountText);
 
+          // Apply date filter first (most selective)
+          if (!this.isPostInDateRange(dateStr, dateFrom, dateTo, onlyToday)) continue;
+          
           // Apply title keyword filter
           if (titleKeyword && !title.toLowerCase().includes(titleKeyword.toLowerCase())) continue;
           
@@ -311,12 +373,28 @@ class PTTMCPServer {
       // Generate result message with filter info
       let resultMessage = `成功取得 ${posts.length} 篇 PTT ${board} 版最新文章`;
       
-      if (hasFilter) {
+      if (hasFilter || hasDateFilter) {
         const filterInfo = [];
+        
+        // Date filter info
+        if (dateFrom && dateTo) {
+          filterInfo.push(`日期範圍 ${dateFrom} 到 ${dateTo}`);
+        } else if (dateFrom) {
+          filterInfo.push(`${dateFrom} 之後`);
+        } else if (dateTo) {
+          filterInfo.push(`${dateTo} 之前`);
+        } else if (onlyToday !== false) {
+          filterInfo.push('僅今日');
+        }
+        
+        // Other filters
         if (titleKeyword) filterInfo.push(`標題包含 '${titleKeyword}'`);
         if (minPushCount !== undefined) filterInfo.push(`推文數 >= ${minPushCount}`);
         if (maxPushCount !== undefined) filterInfo.push(`推文數 <= ${maxPushCount}`);
-        resultMessage += ` (篩選條件: ${filterInfo.join(', ')})`;
+        
+        if (filterInfo.length > 0) {
+          resultMessage += ` (篩選條件: ${filterInfo.join(', ')})`;
+        }
       }
       
       return {
@@ -343,6 +421,71 @@ class PTTMCPServer {
   // Helper function to encode search queries for PTT
   encodePTTQuery(query) {
     return encodeURIComponent(query).replace(/%20/g, '+');
+  }
+
+  // Helper function to parse flexible date inputs
+  parseFlexibleDate(dateStr) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    if (!dateStr) return null;
+    
+    // Handle special keywords
+    if (dateStr === 'today') {
+      return new Date(currentYear, now.getMonth(), now.getDate());
+    }
+    if (dateStr === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return new Date(currentYear, yesterday.getMonth(), yesterday.getDate());
+    }
+    
+    // Handle M/DD format (PTT native format)
+    const pttMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (pttMatch) {
+      const month = parseInt(pttMatch[1]) - 1;
+      const day = parseInt(pttMatch[2]);
+      return new Date(currentYear, month, day);
+    }
+    
+    // Handle YYYY-MM-DD format
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+      const year = parseInt(isoMatch[1]);
+      const month = parseInt(isoMatch[2]) - 1;
+      const day = parseInt(isoMatch[3]);
+      return new Date(year, month, day);
+    }
+    
+    return null;
+  }
+
+  // Check if a PTT post date falls within the specified date range
+  isPostInDateRange(postDateStr, dateFrom, dateTo, onlyToday) {
+    const postDate = this.parsePTTDate(postDateStr);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    // If date range is specified, use it (overrides onlyToday)
+    if (dateFrom || dateTo) {
+      const fromDate = dateFrom ? this.parseFlexibleDate(dateFrom) : new Date(1900, 0, 1);
+      const toDate = dateTo ? this.parseFlexibleDate(dateTo) : new Date(2100, 11, 31);
+      
+      if (!fromDate || !toDate) return false;
+      
+      // Set to end of day for toDate to be inclusive
+      toDate.setHours(23, 59, 59, 999);
+      
+      return postDate >= fromDate && postDate <= toDate;
+    }
+    
+    // Default behavior: only today's posts
+    if (onlyToday !== false) {
+      return postDate.toDateString() === todayStart.toDateString();
+    }
+    
+    // If onlyToday is explicitly false, include all dates
+    return true;
   }
 
   async searchThreadPosts(args) {
