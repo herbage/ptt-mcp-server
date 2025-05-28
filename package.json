@@ -1,7 +1,7 @@
 {
-  "name": "ptt-stock-mcp-server",
+  "name": "ptt-mcp-server",
   "version": "1.0.0",
-  "description": "MCP Server for scraping PTT Stock board posts and comments",
+  "description": "MCP Server for scraping PTT boards with search, filtering, and post analysis",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "node --watch index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["mcp", "ptt", "stock", "scraper", "taiwan"],
+  "keywords": ["mcp", "ptt", "scraper", "taiwan", "board", "search", "posts"],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
@@ -21,7 +21,7 @@
     "@types/node": "^20.10.0"
   },
   "bin": {
-    "ptt-stock-mcp": "./index.js"
+    "ptt-mcp": "./index.js"
   },
   "engines": {
     "node": ">=18.0.0"
