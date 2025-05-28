@@ -1,6 +1,8 @@
-# Debugging Lessons Learned
+# PTT MCP Server Development Log
 
-## 2025-05-28: PTT Multi-Board Support Extension
+## 2025-05-28: Complete Development Journey
+
+This document chronicles the full development process from initial debugging to final feature implementation, including lessons learned and architectural decisions.
 
 ### Part 1: PTT Stock Posts 24h Function Debug
 
@@ -193,4 +195,73 @@ if (posts.length >= actualLimit) break;
 ### Files Modified
 - `index.js`: Complete function refactor
 - `README.md`: Updated API documentation and examples
-- `docs/2025-05-28-debugging-lessons.md`: This documentation
+- `docs/2025-05-28-development-log.md`: This documentation
+
+---
+
+### Part 4: Push Count Filtering Feature
+
+### Objective
+Add optional parameters to filter posts by push count (more than or less than X) to enable users to find hot posts, cold posts, or posts within specific engagement ranges.
+
+### Feature Design
+Chose range filtering approach with two optional parameters:
+- `minPushCount`: Filter posts with >= X pushes
+- `maxPushCount`: Filter posts with <= X pushes
+
+### Implementation Highlights
+1. **Parameter Validation**: Comprehensive bounds checking (-100 to 200)
+2. **Logical Validation**: Ensure min <= max when both provided
+3. **Dynamic Pagination**: Adjust page limits when filtering is active
+4. **Clear Messaging**: Result messages show applied filter criteria
+
+### Use Cases Enabled
+- **Hot Posts**: `minPushCount: 30` for high engagement content
+- **Cold Posts**: `maxPushCount: 5` for low engagement content  
+- **Range Filtering**: `minPushCount: 10, maxPushCount: 50` for moderate engagement
+- **Controversial Posts**: Negative push counts for controversial content
+
+### Testing Results
+```
+✅ Hot posts filter (>= 20): 10 posts found, all valid
+✅ Cold posts filter (<= 5): 10 posts found, all valid  
+✅ Range filter (10-30): 10 posts found, all valid
+✅ Error validation: All invalid inputs properly rejected
+```
+
+### Technical Considerations
+- Applied filtering during collection loop for efficiency
+- Increased max pages when filtering to ensure sufficient candidates
+- Maintained existing push count parsing logic ("爆" = 100, "X1" = -10, etc.)
+
+### API Examples
+```json
+// Hot posts only
+{"board": "Stock", "minPushCount": 30}
+
+// Cold posts only  
+{"board": "NBA", "maxPushCount": 5}
+
+// Moderate engagement range
+{"board": "Baseball", "minPushCount": 10, "maxPushCount": 50}
+```
+
+### Files Modified
+- `index.js`: Added filtering parameters and logic
+- `README.md`: Updated documentation with examples
+- Tool schema: Added minPushCount and maxPushCount parameters
+
+### Development Timeline Summary
+1. **Initial Debug**: Fixed 24-hour pagination issues
+2. **Multi-Board Extension**: Added support for 19 popular boards
+3. **Pagination Refactor**: Replaced unreliable 24h logic with recent posts
+4. **Push Filtering**: Added flexible engagement-based filtering
+
+### Total Features Delivered
+- ✅ Multi-board support (19 boards)
+- ✅ Reliable recent posts fetching
+- ✅ Board validation and discovery
+- ✅ Push count filtering (min/max/range)
+- ✅ Comprehensive error handling
+- ✅ Dynamic pagination optimization
+- ✅ Complete documentation and examples

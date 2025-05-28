@@ -65,6 +65,14 @@ class PTTMCPServer {
                 type: "number",
                 description: "限制返回文章數量 (預設: 50, 最大: 200)",
                 default: 50
+              },
+              minPushCount: {
+                type: "number",
+                description: "最小推文數過濾 (可選, 例如: 10 表示只返回推文數 >= 10 的文章)"
+              },
+              maxPushCount: {
+                type: "number", 
+                description: "最大推文數過濾 (可選, 例如: 50 表示只返回推文數 <= 50 的文章)"
               }
             },
             required: ["board"]
@@ -159,7 +167,7 @@ class PTTMCPServer {
 
   async getRecentPosts(args) {
     try {
-      const { board = "Stock", limit = 50 } = args || {};
+      const { board = "Stock", limit = 50, minPushCount, maxPushCount } = args || {};
       
       // Validate board name
       if (!this.isValidBoard(board)) {
@@ -170,10 +178,25 @@ class PTTMCPServer {
       const maxLimit = 200;
       const actualLimit = Math.min(Math.max(1, limit), maxLimit);
       
+      // Validate push count filters
+      if (minPushCount !== undefined && (isNaN(minPushCount) || minPushCount < -100)) {
+        throw new Error(`無效的最小推文數: ${minPushCount}. 必須是數字且 >= -100`);
+      }
+      
+      if (maxPushCount !== undefined && (isNaN(maxPushCount) || maxPushCount > 200)) {
+        throw new Error(`無效的最大推文數: ${maxPushCount}. 必須是數字且 <= 200`);
+      }
+      
+      if (minPushCount !== undefined && maxPushCount !== undefined && minPushCount > maxPushCount) {
+        throw new Error(`最小推文數 (${minPushCount}) 不能大於最大推文數 (${maxPushCount})`);
+      }
+      
       const posts = [];
       let currentUrl = `${this.PTT_BASE_URL}/${board}/index.html`;
       let pageCount = 0;
-      const maxPages = Math.ceil(actualLimit / 20) + 2; // Dynamic max pages based on limit
+      // If filtering by push count, we might need more pages to find enough matching posts
+      const hasFilter = minPushCount !== undefined || maxPushCount !== undefined;
+      const maxPages = hasFilter ? Math.ceil(actualLimit / 5) + 5 : Math.ceil(actualLimit / 20) + 2;
 
       while (posts.length < actualLimit && pageCount < maxPages) {
         const html = await this.fetchWithCookies(currentUrl);
@@ -194,6 +217,10 @@ class PTTMCPServer {
           
           const url = 'https://www.ptt.cc' + href;
           const pushCount = this.parsePushCount(pushCountText);
+
+          // Apply push count filters
+          if (minPushCount !== undefined && pushCount < minPushCount) continue;
+          if (maxPushCount !== undefined && pushCount > maxPushCount) continue;
 
           posts.push({
             title,
@@ -216,11 +243,21 @@ class PTTMCPServer {
         pageCount++;
       }
 
+      // Generate result message with filter info
+      let resultMessage = `成功取得 ${posts.length} 篇 PTT ${board} 版最新文章`;
+      
+      if (hasFilter) {
+        const filterInfo = [];
+        if (minPushCount !== undefined) filterInfo.push(`推文數 >= ${minPushCount}`);
+        if (maxPushCount !== undefined) filterInfo.push(`推文數 <= ${maxPushCount}`);
+        resultMessage += ` (篩選條件: ${filterInfo.join(', ')})`;
+      }
+      
       return {
         content: [
           {
             type: "text",
-            text: `成功取得 ${posts.length} 篇 PTT ${board} 版最新文章:\n\n${JSON.stringify(posts, null, 2)}`
+            text: `${resultMessage}:\n\n${JSON.stringify(posts, null, 2)}`
           }
         ]
       };
