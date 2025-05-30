@@ -7,7 +7,7 @@ export class ListPostsTool {
 
   async execute(args) {
     try {
-      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = args || {};
+      const { board = "Stock", pageLimit = 3, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = args || {};
       
       if (!(await this.scraper.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
@@ -15,14 +15,14 @@ export class ListPostsTool {
       
       this.validateInputs({ minPushCount, maxPushCount, dateFrom, dateTo });
       
-      const actualLimit = Math.min(Math.max(1, limit), 200);
+      const actualPageLimit = Math.min(Math.max(1, pageLimit), 10);
       
       if (this.isDateRangeTooFarBack(dateFrom)) {
         return this.createDateRangeLimitResponse(board);
       }
       
       const posts = await this.fetchFilteredPosts({
-        board, actualLimit, minPushCount, maxPushCount, 
+        board, actualPageLimit, minPushCount, maxPushCount, 
         titleKeyword, dateFrom, dateTo
       });
       
@@ -89,24 +89,14 @@ export class ListPostsTool {
     };
   }
 
-  async fetchFilteredPosts({ board, actualLimit, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo }) {
+  async fetchFilteredPosts({ board, actualPageLimit, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo }) {
     const posts = [];
     let currentUrl = `${this.scraper.PTT_BASE_URL}/${board}/index.html`;
     let pageCount = 0;
     
-    const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
-    const hasDateFilter = dateFrom || dateTo;
-    
-    let maxPages;
-    if (hasDateFilter && (dateFrom || dateTo)) {
-      maxPages = 15;
-    } else if (hasFilter) {
-      maxPages = Math.ceil(actualLimit / 5) + 5;
-    } else {
-      maxPages = Math.ceil(actualLimit / 20) + 2;
-    }
+    const maxPages = actualPageLimit;
 
-    while (posts.length < actualLimit && pageCount < maxPages) {
+    while (pageCount < maxPages) {
       const pagePosts = await this.scraper.scrapePostList(currentUrl);
       
       for (const post of pagePosts) {
@@ -116,10 +106,7 @@ export class ListPostsTool {
         if (maxPushCount !== undefined && post.pushCount > maxPushCount) continue;
 
         posts.push(post);
-        if (posts.length >= actualLimit) break;
       }
-
-      if (posts.length >= actualLimit) break;
 
       const html = await this.scraper.fetchWithCookies(currentUrl);
       const cheerio = await import('cheerio');

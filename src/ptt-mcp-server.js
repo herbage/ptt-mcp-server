@@ -60,10 +60,10 @@ export class PTTMCPServer {
                 description: "看板名稱 (例如: Stock, Baseball, Gossiping, HatePolitics, Tech_Job, Movie, NBA)",
                 default: "Stock"
               },
-              limit: {
+              pageLimit: {
                 type: "number",
-                description: "限制返回文章數量 (預設: 50, 最大: 200)",
-                default: 50
+                description: "限制爬取頁面數量 (預設: 3, 最大: 10)",
+                default: 3
               },
               minPushCount: {
                 type: "number",
