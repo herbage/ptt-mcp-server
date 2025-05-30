@@ -77,14 +77,9 @@ export class PTTMCPServer {
                 type: "string",
                 description: "標題關鍵字過濾 (可選, 例如: '台積電' 只返回標題包含此關鍵字的文章)"
               },
-              onlyToday: {
-                type: "boolean",
-                description: "只顯示今天的文章 (預設: true)。設為 false 則顯示所有日期",
-                default: true
-              },
               dateFrom: {
                 type: "string",
-                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')。覆蓋 onlyToday 設定"
+                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')"
               },
               dateTo: {
                 type: "string", 
@@ -165,7 +160,7 @@ export class PTTMCPServer {
               },
               dateFrom: {
                 type: "string",
-                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')。覆蓋 onlyToday 設定"
+                description: "起始日期過濾 (可選, 格式: 'M/DD' 如 '5/25' 或 'YYYY-MM-DD' 如 '2025-05-25')"
               },
               dateTo: {
                 type: "string", 

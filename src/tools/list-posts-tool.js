@@ -1,5 +1,4 @@
 import { DateUtils } from '../utils/date-utils.js';
-import { PTTUtils } from '../utils/ptt-utils.js';
 
 export class ListPostsTool {
   constructor(scraper) {
@@ -8,13 +7,13 @@ export class ListPostsTool {
 
   async execute(args) {
     try {
-      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword, onlyToday = true, dateFrom, dateTo } = args || {};
+      const { board = "Stock", limit = 50, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = args || {};
       
       if (!(await this.scraper.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
       }
       
-      this.validateInputs({ limit, minPushCount, maxPushCount, dateFrom, dateTo });
+      this.validateInputs({ minPushCount, maxPushCount, dateFrom, dateTo });
       
       const actualLimit = Math.min(Math.max(1, limit), 200);
       
@@ -24,18 +23,18 @@ export class ListPostsTool {
       
       const posts = await this.fetchFilteredPosts({
         board, actualLimit, minPushCount, maxPushCount, 
-        titleKeyword, onlyToday, dateFrom, dateTo
+        titleKeyword, dateFrom, dateTo
       });
       
       return this.createSuccessResponse(posts, board, {
-        minPushCount, maxPushCount, titleKeyword, onlyToday, dateFrom, dateTo
+        minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo
       });
     } catch (error) {
       return this.createErrorResponse(error.message);
     }
   }
 
-  validateInputs({ limit, minPushCount, maxPushCount, dateFrom, dateTo }) {
+  validateInputs({ minPushCount, maxPushCount, dateFrom, dateTo }) {
     if (minPushCount !== undefined && (isNaN(minPushCount) || minPushCount < -100)) {
       throw new Error(`無效的最小推文數: ${minPushCount}. 必須是數字且 >= -100`);
     }
@@ -90,13 +89,13 @@ export class ListPostsTool {
     };
   }
 
-  async fetchFilteredPosts({ board, actualLimit, minPushCount, maxPushCount, titleKeyword, onlyToday, dateFrom, dateTo }) {
+  async fetchFilteredPosts({ board, actualLimit, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo }) {
     const posts = [];
     let currentUrl = `${this.scraper.PTT_BASE_URL}/${board}/index.html`;
     let pageCount = 0;
     
     const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
-    const hasDateFilter = dateFrom || dateTo || onlyToday !== false;
+    const hasDateFilter = dateFrom || dateTo;
     
     let maxPages;
     if (hasDateFilter && (dateFrom || dateTo)) {
@@ -111,7 +110,7 @@ export class ListPostsTool {
       const pagePosts = await this.scraper.scrapePostList(currentUrl);
       
       for (const post of pagePosts) {
-        if (!DateUtils.isPostInDateRange(post.date, dateFrom, dateTo, onlyToday)) continue;
+        if (!DateUtils.isPostInDateRange(post.date, dateFrom, dateTo, false)) continue;
         if (titleKeyword && !post.title.toLowerCase().includes(titleKeyword.toLowerCase())) continue;
         if (minPushCount !== undefined && post.pushCount < minPushCount) continue;
         if (maxPushCount !== undefined && post.pushCount > maxPushCount) continue;
@@ -136,9 +135,9 @@ export class ListPostsTool {
   }
 
   createSuccessResponse(posts, board, filters) {
-    const { minPushCount, maxPushCount, titleKeyword, onlyToday, dateFrom, dateTo } = filters;
+    const { minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = filters;
     const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
-    const hasDateFilter = dateFrom || dateTo || onlyToday !== false;
+    const hasDateFilter = dateFrom || dateTo;
     
     let resultMessage = `成功取得 ${posts.length} 篇 PTT ${board} 版最新文章`;
     
@@ -151,10 +150,7 @@ export class ListPostsTool {
         filterInfo.push(`${dateFrom} 之後`);
       } else if (dateTo) {
         filterInfo.push(`${dateTo} 之前`);
-      } else if (onlyToday !== false) {
-        filterInfo.push('僅今日');
       }
-      
       if (titleKeyword) filterInfo.push(`標題包含 '${titleKeyword}'`);
       if (minPushCount !== undefined) filterInfo.push(`推文數 >= ${minPushCount}`);
       if (maxPushCount !== undefined) filterInfo.push(`推文數 <= ${maxPushCount}`);
