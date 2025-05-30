@@ -19,7 +19,6 @@ describe('Refactored PTTMCPServer', () => {
     expect(server.tools.listPosts).toBeDefined();
     expect(server.tools.postDetail).toBeDefined();
     expect(server.tools.searchPosts).toBeDefined();
-    expect(server.tools.searchThread).toBeDefined();
     expect(server.tools.listBoards).toBeDefined();
     expect(server.tools.summarizePosts).toBeDefined();
   });

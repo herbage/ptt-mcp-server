@@ -9,7 +9,6 @@ import { PTTScraper } from './parsers/ptt-scraper.js';
 import { ListPostsTool } from './tools/list-posts-tool.js';
 import { PostDetailTool } from './tools/post-detail-tool.js';
 import { SearchPostsTool } from './tools/search-posts-tool.js';
-import { SearchThreadTool } from './tools/search-thread-tool.js';
 import { SummarizePostsTool } from './tools/summarize-posts-tool.js';
 import { ListBoardsTool } from './tools/list-boards-tool.js';
 
@@ -37,7 +36,6 @@ export class PTTMCPServer {
       listPosts: new ListPostsTool(this.scraper),
       postDetail: new PostDetailTool(this.scraper),
       searchPosts: new SearchPostsTool(this.scraper),
-      searchThread: new SearchThreadTool(this.scraper),
       listBoards: new ListBoardsTool(),
       summarizePosts: null // Will be initialized after postDetail
     };
@@ -104,30 +102,6 @@ export class PTTMCPServer {
           }
         },
         {
-          name: "search_thread_posts",
-          description: "搜尋指定標題的所有相關文章 (同標題文章)",
-          inputSchema: {
-            type: "object",
-            properties: {
-              board: {
-                type: "string",
-                description: "看板名稱 (例如: Stock, Baseball, NBA)",
-                default: "Stock"
-              },
-              title: {
-                type: "string",
-                description: "要搜尋的文章標題 (例如: '[新聞] 台積電Q4財報亮眼')"
-              },
-              limit: {
-                type: "number",
-                description: "限制返回文章數量 (預設: 30, 最大: 100)",
-                default: 30
-              }
-            },
-            required: ["board", "title"]
-          }
-        },
-        {
           name: "search_posts",
           description: "在指定看板搜尋文章 (支援多種搜尋類型)",
           inputSchema: {
@@ -140,23 +114,12 @@ export class PTTMCPServer {
               },
               query: {
                 type: "string",
-                description: "搜尋關鍵字或片語"
+                description: "搜尋標題關鍵字或片語"
               },
-              searchType: {
-                type: "string",
-                enum: ["keyword", "title", "author"],
-                description: "搜尋類型: keyword(全文搜尋), title(標題包含關鍵字), author(作者)",
-                default: "keyword"
-              },
-              limit: {
+              pageLimit: {
                 type: "number",
-                description: "限制返回文章數量 (預設: 30, 最大: 100)",
-                default: 30
-              },
-              onlyToday: {
-                type: "boolean",
-                description: "只顯示今天的文章 (預設: false)。設為 true 則只顯示今日文章",
-                default: false
+                description: "限制爬取頁面數量 (預設: 3, 最大: 10)",
+                default: 3
               },
               dateFrom: {
                 type: "string",
@@ -212,8 +175,6 @@ export class PTTMCPServer {
       switch (request.params.name) {
         case "list_posts":
           return await this.tools.listPosts.execute(request.params.arguments);
-        case "search_thread_posts":
-          return await this.tools.searchThread.execute(request.params.arguments);
         case "search_posts":
           return await this.tools.searchPosts.execute(request.params.arguments);
         case "get_post_detail":
