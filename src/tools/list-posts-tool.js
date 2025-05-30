@@ -7,7 +7,7 @@ export class ListPostsTool {
 
   async execute(args) {
     try {
-      const { board = "Stock", pageLimit = 3, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = args || {};
+      const { board = "Stock", pageLimit = 3, startPage, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = args || {};
       
       if (!(await this.scraper.isValidBoard(board))) {
         throw new Error(`無效的看板名稱: ${board}. 請使用 list_popular_boards 查看可用看板`);
@@ -21,14 +21,14 @@ export class ListPostsTool {
         return this.createDateRangeLimitResponse(board);
       }
       
-      const posts = await this.fetchFilteredPosts({
-        board, actualPageLimit, minPushCount, maxPushCount, 
+      const result = await this.fetchFilteredPosts({
+        board, actualPageLimit, startPage, minPushCount, maxPushCount, 
         titleKeyword, dateFrom, dateTo
       });
       
-      return this.createSuccessResponse(posts, board, {
+      return this.createSuccessResponse(result.posts, board, {
         minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo
-      });
+      }, result.pagination);
     } catch (error) {
       return this.createErrorResponse(error.message);
     }
@@ -89,12 +89,34 @@ export class ListPostsTool {
     };
   }
 
-  async fetchFilteredPosts({ board, actualPageLimit, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo }) {
+  async fetchFilteredPosts({ board, actualPageLimit, startPage, minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo }) {
     const posts = [];
-    let currentUrl = `${this.scraper.PTT_BASE_URL}/${board}/index.html`;
-    let pageCount = 0;
+    let currentUrl;
+    let currentPageIndex = null;
     
+    // Determine starting URL
+    if (startPage) {
+      currentUrl = `${this.scraper.PTT_BASE_URL}/${board}/index${startPage}.html`;
+      currentPageIndex = startPage;
+    } else {
+      currentUrl = `${this.scraper.PTT_BASE_URL}/${board}/index.html`;
+      // Extract current page index from first page
+      const html = await this.scraper.fetchWithCookies(currentUrl);
+      const cheerio = await import('cheerio');
+      const $ = cheerio.load(html);
+      const prevPageLink = this.scraper.findPrevPageLink($);
+      if (prevPageLink) {
+        const match = prevPageLink.match(/index(\d+)\.html/);
+        if (match) {
+          currentPageIndex = parseInt(match[1]) + 1; // Current page is +1 from previous page
+        }
+      }
+    }
+    
+    let pageCount = 0;
     const maxPages = actualPageLimit;
+    let hasMorePages = false;
+    let nextPageIndex = null;
 
     while (pageCount < maxPages) {
       const pagePosts = await this.scraper.scrapePostList(currentUrl);
@@ -112,16 +134,42 @@ export class ListPostsTool {
       const cheerio = await import('cheerio');
       const $ = cheerio.load(html);
       const prevPageLink = this.scraper.findPrevPageLink($);
-      if (!prevPageLink) break;
-
-      currentUrl = 'https://www.ptt.cc' + prevPageLink;
+      
       pageCount++;
+      
+      if (prevPageLink && pageCount < maxPages) {
+        currentUrl = 'https://www.ptt.cc' + prevPageLink;
+        // Extract next page index
+        const match = prevPageLink.match(/index(\d+)\.html/);
+        if (match) {
+          currentPageIndex = parseInt(match[1]);
+        }
+      } else if (prevPageLink) {
+        // More pages available but we've hit our limit
+        hasMorePages = true;
+        const match = prevPageLink.match(/index(\d+)\.html/);
+        if (match) {
+          nextPageIndex = parseInt(match[1]);
+        }
+        break;
+      } else {
+        // No more pages
+        break;
+      }
     }
 
-    return posts;
+    return {
+      posts,
+      pagination: {
+        currentPage: startPage || currentPageIndex,
+        hasMorePages,
+        nextPage: nextPageIndex,
+        pagesRetrieved: pageCount
+      }
+    };
   }
 
-  createSuccessResponse(posts, board, filters) {
+  createSuccessResponse(posts, board, filters, pagination) {
     const { minPushCount, maxPushCount, titleKeyword, dateFrom, dateTo } = filters;
     const hasFilter = minPushCount !== undefined || maxPushCount !== undefined || titleKeyword;
     const hasDateFilter = dateFrom || dateTo;
@@ -147,12 +195,31 @@ export class ListPostsTool {
       }
     }
     
-    return {
+    // Add pagination info to message
+    if (pagination) {
+      if (pagination.hasMorePages) {
+        resultMessage += `\n\n📄 分頁資訊: 已取得 ${pagination.pagesRetrieved} 頁，還有更多頁面可讀取`;
+        if (pagination.nextPage) {
+          resultMessage += `\n▶️ 續讀下一頁請使用: {"startPage": ${pagination.nextPage}}`;
+        }
+      } else {
+        resultMessage += `\n\n📄 分頁資訊: 已取得 ${pagination.pagesRetrieved} 頁 (已到最後一頁)`;
+      }
+    }
+
+    const response = {
       content: [{
         type: "text",
         text: `${resultMessage}:\n\n${JSON.stringify(posts, null, 2)}`
       }]
     };
+
+    // Add pagination metadata for programmatic access
+    if (pagination) {
+      response.pagination = pagination;
+    }
+
+    return response;
   }
 
   createErrorResponse(message) {

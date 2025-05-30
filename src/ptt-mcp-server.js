@@ -63,6 +63,11 @@ export class PTTMCPServer {
                 description: "限制爬取頁面數量 (預設: 3, 最大: 10)",
                 default: 3
               },
+              startPage: {
+                type: "number",
+                description: "起始頁面索引 (可選, 用於分頁續讀)。例如: 39210 對應 index39210.html",
+                minimum: 1
+              },
               minPushCount: {
                 type: "number",
                 description: "最小推文數過濾 (可選, 例如: 10 表示只返回推文數 >= 10 的文章)"
@@ -120,6 +125,11 @@ export class PTTMCPServer {
                 type: "number",
                 description: "限制爬取頁面數量 (預設: 3, 最大: 10)",
                 default: 3
+              },
+              startPage: {
+                type: "number",
+                description: "起始頁面索引 (可選, 用於搜尋續讀)。例如: 2 對應第2頁搜尋結果",
+                minimum: 1
               },
               dateFrom: {
                 type: "string",
