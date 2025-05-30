@@ -29,7 +29,7 @@ This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest
 - Coordinates 6 different tools for PTT data extraction
 
 **Key Tools Available:**
-1. `get_recent_posts` - Fetch recent posts from PTT boards with filtering
+1. `list_posts` - List posts from PTT boards with filtering
 2. `get_post_detail` - Get detailed post content including comments
 3. `search_thread_posts` - Search for posts with same title (thread search)
 4. `search_posts` - General search (keyword, title, author)

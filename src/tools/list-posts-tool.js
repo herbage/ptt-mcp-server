@@ -1,7 +1,7 @@
 import { DateUtils } from '../utils/date-utils.js';
 import { PTTUtils } from '../utils/ptt-utils.js';
 
-export class RecentPostsTool {
+export class ListPostsTool {
   constructor(scraper) {
     this.scraper = scraper;
   }

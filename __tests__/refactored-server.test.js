@@ -16,7 +16,7 @@ describe('Refactored PTTMCPServer', () => {
   });
 
   test('should have all required tools', () => {
-    expect(server.tools.recentPosts).toBeDefined();
+    expect(server.tools.listPosts).toBeDefined();
     expect(server.tools.postDetail).toBeDefined();
     expect(server.tools.searchPosts).toBeDefined();
     expect(server.tools.searchThread).toBeDefined();

@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { PTTScraper } from './parsers/ptt-scraper.js';
-import { RecentPostsTool } from './tools/recent-posts-tool.js';
+import { ListPostsTool } from './tools/list-posts-tool.js';
 import { PostDetailTool } from './tools/post-detail-tool.js';
 import { SearchPostsTool } from './tools/search-posts-tool.js';
 import { SearchThreadTool } from './tools/search-thread-tool.js';
@@ -34,7 +34,7 @@ export class PTTMCPServer {
 
   initializeTools() {
     this.tools = {
-      recentPosts: new RecentPostsTool(this.scraper),
+      listPosts: new ListPostsTool(this.scraper),
       postDetail: new PostDetailTool(this.scraper),
       searchPosts: new SearchPostsTool(this.scraper),
       searchThread: new SearchThreadTool(this.scraper),
@@ -50,8 +50,8 @@ export class PTTMCPServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "get_recent_posts",
-          description: "取得指定 PTT 看板最近的文章列表",
+          name: "list_posts",
+          description: "列出指定 PTT 看板的文章列表",
           inputSchema: {
             type: "object",
             properties: {
@@ -215,8 +215,8 @@ export class PTTMCPServer {
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       switch (request.params.name) {
-        case "get_recent_posts":
-          return await this.tools.recentPosts.execute(request.params.arguments);
+        case "list_posts":
+          return await this.tools.listPosts.execute(request.params.arguments);
         case "search_thread_posts":
           return await this.tools.searchThread.execute(request.params.arguments);
         case "search_posts":
