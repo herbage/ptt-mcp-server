@@ -343,11 +343,14 @@ npm start
 ## 技術規格
 
 - **Node.js**: >= 18.0.0
+- **架構**: 模組化 ES6+ 設計，配備完整測試套件
 - **主要依賴**:
   - @modelcontextprotocol/sdk: MCP 核心 SDK
   - cheerio: HTML 解析
   - node-fetch: HTTP 請求
-  - zod: 資料驗證
+- **開發工具**:
+  - Jest: 測試框架 (51 個測試)
+  - TypeScript 配置檔案支援
 
 ## 注意事項
 
@@ -374,25 +377,48 @@ npm run dev
 
 ## 開發
 
+### 測試
+
+```bash
+npm test  # 執行 51 個測試案例
+```
+
+### 模組化架構
+
+```
+src/
+├── utils/           # 工具函數 (DateUtils, PTTUtils)
+├── parsers/         # 網頁爬取邏輯 (PTTScraper)
+├── tools/           # MCP 工具實作
+└── ptt-mcp-server.js # 主服務器協調
+```
+
 ### 修改爬蟲邏輯
 
-主要邏輯在 `index.js` 中的各個方法：
-
-- `getRecentPosts()`: 文章列表爬取 (支援多看板)
-- `getPostDetail()`: 文章詳細內容
-- `summarizePosts()`: 摘要生成
-- `listPopularBoards()`: 看板清單
-- `isValidBoard()`: 看板驗證
+- **工具邏輯**: 在 `src/tools/` 各個工具檔案中
+- **爬取邏輯**: 在 `src/parsers/ptt-scraper.js` 中
+- **工具函數**: 在 `src/utils/` 中
 
 ### 新增看板
 
-在 `isValidBoard()` 和 `listPopularBoards()` 方法中添加新的看板支援。
+系統自動支援所有公開 PTT 看板，無需手動添加。
 
 ### 新增功能
 
-可以在 `setupToolHandlers()` 中添加新的工具函數。
+1. 在 `src/tools/` 建立新工具類別
+2. 在 `src/ptt-mcp-server.js` 註冊新工具
+3. 撰寫相對應的測試檔案
 
 ## 更新日誌
+
+### v3.0.0 (2025-05-30)
+
+- 🏗️ **重大重構**: 模組化架構設計
+- ✅ **完整測試**: 51 個測試案例，確保程式碼品質
+- 📦 **分離關注點**: 工具、解析器、工具函數獨立模組
+- 🧪 **測試驅動**: Jest 測試框架，涵蓋所有功能
+- 🎯 **易於維護**: 每個功能獨立檔案，便於開發和除錯
+- 📚 **向下相容**: 保持所有現有 API 和功能
 
 ### v2.4.0 (2025-05-28)
 

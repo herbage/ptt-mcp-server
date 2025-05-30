@@ -7,18 +7,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm start` - Run the MCP server
 - `npm run dev` - Run the server with file watching for development
 - `npm install` - Install dependencies
-- `npm test` - Run tests (currently no tests defined)
+- `npm test` - Run comprehensive test suite (51 tests)
 
 ## Architecture Overview
 
-This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest bulletin board system) board posts. The server is built as a single-file Node.js application (`index.js`) using ES modules.
+This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest bulletin board system) board posts. The server uses a modular architecture with separated concerns and comprehensive test coverage.
 
 ### Core Components
 
-**PTTMCPServer Class** (index.js:32-973)
+**Modular Architecture:**
+- `index.js` - Main entry point and exports
+- `src/ptt-mcp-server.js` - MCP server coordination
+- `src/parsers/ptt-scraper.js` - Web scraping logic
+- `src/utils/date-utils.js` - Date parsing and validation
+- `src/utils/ptt-utils.js` - PTT-specific utilities
+- `src/tools/` - Individual MCP tool implementations
+
+**PTTMCPServer Class** (src/ptt-mcp-server.js)
 - Main server class implementing MCP protocol
 - Uses `@modelcontextprotocol/sdk` for MCP communication
-- Handles 6 different tools for PTT data extraction
+- Coordinates 6 different tools for PTT data extraction
 
 **Key Tools Available:**
 1. `get_recent_posts` - Fetch recent posts from PTT boards with filtering
@@ -76,17 +84,26 @@ This is a Model Context Protocol (MCP) server for scraping PTT (Taiwan's largest
 
 ## Working with This Codebase
 
+### Modular Structure
+- **Utilities**: Use `DateUtils` and `PTTUtils` classes for common operations
+- **Scraping**: `PTTScraper` handles all web scraping and HTML parsing
+- **Tools**: Each MCP tool is a separate class in `src/tools/`
+- **Testing**: 51 comprehensive tests ensure code quality
+
 ### Board Validation System
-The `isValidBoard()` method now dynamically validates boards by making HTTP requests to PTT. No need to manually add new boards - the system supports any public PTT board automatically. The `listPopularBoards()` method shows popular examples but is not exhaustive.
+The `PTTScraper.isValidBoard()` method dynamically validates boards by making HTTP requests to PTT. No need to manually add new boards - the system supports any public PTT board automatically.
 
 ### Modifying Search Logic
-Search functionality is centralized in `searchPosts()` and `searchThreadPosts()` methods. PTT search uses specific URL query parameters that may need adjustment if PTT changes their search interface.
+Search functionality is in individual tool classes (`SearchPostsTool`, `SearchThreadTool`). PTT search uses specific URL query parameters that may need adjustment if PTT changes their search interface.
 
-### Date Filtering Improvements
-Date parsing logic is in `parseFlexibleDate()` and `isPostInDateRange()`. PTT uses Taiwan timezone and M/DD format natively.
+### Date Filtering
+Date parsing logic is in `DateUtils.parseFlexibleDate()` and `DateUtils.isPostInDateRange()`. PTT uses Taiwan timezone and M/DD format natively.
 
 ### Adding New Tools
-New MCP tools should be added to both the `ListToolsRequestSchema` handler (index.js:51-215) and `CallToolRequestSchema` handler (index.js:217-235).
+1. Create new tool class in `src/tools/`
+2. Add to tool initialization in `src/ptt-mcp-server.js`
+3. Add to schema handlers for both list and call operations
+4. Write tests for the new tool
 
 ## PTT-Specific Considerations
 
@@ -98,9 +115,15 @@ New MCP tools should be added to both the `ListToolsRequestSchema` handler (inde
 
 ## Testing Approach
 
-Currently no automated tests. Manual testing can be done by:
-1. Running `npm run dev` to start server with file watching
-2. Testing individual tools via MCP client or Claude Desktop
-3. Validating against different PTT boards and date ranges
+Comprehensive test suite with 51 tests covering:
+1. **Unit tests** for utility functions (`DateUtils`, `PTTUtils`)
+2. **Integration tests** for data parsing methods
+3. **Server tests** for MCP server initialization
+4. **Backward compatibility tests** ensuring refactored code works identically to original
+
+Run tests with:
+- `npm test` - Run all 51 tests
+- Manual testing via MCP client or Claude Desktop
+- Validate against different PTT boards and date ranges
 
 The server includes extensive error handling and input validation to catch issues early.
